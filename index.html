@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Videos are read and processed only in this page. connect-src 'self' means
+     the page cannot send data to any other origin. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0a0a0b">
+<meta name="description" content="Capture sharp, full-resolution still frames out of any video. Pick a start point, an interval and a count, then export PNG or JPG. Everything runs privately in your browser.">
+<title>Frame Capture Studio</title>
+<script>
+/* Applies the saved theme before first paint (no flash). Dark is the default. */
+(function () {
+  var pref = "dark";
+  try { var s = localStorage.getItem("preferredTheme"); if (s === "light" || s === "dark" || s === "system") pref = s; } catch (e) {}
+  var theme = pref === "system"
+    ? (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : pref;
+  document.documentElement.setAttribute("data-theme", theme);
+  var h = location.hash, doc = /^#\/(privacy|terms)/.exec(h);
+  document.documentElement.setAttribute("data-route", /^#\/editor/.test(h) ? "editor" : doc ? "legal" : "home");
+  if (doc) document.documentElement.setAttribute("data-doc", doc[1]);
+  document.documentElement.classList.add("i18n-wait");
+  setTimeout(function () { document.documentElement.classList.remove("i18n-wait"); }, 3000);
+  var m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute("content", theme === "light" ? "#f5f5f7" : "#0a0a0b");
+})();
+</script>
+<link rel="icon" href="assets/icon.svg?v=1.0.0" type="image/svg+xml">
+<link rel="stylesheet" href="assets/css/app.css?v=1.0.0">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="fcs-mark" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="8" style="fill:var(--label)"/>
+    <rect x="5" y="8" width="22" height="16" rx="2.5" style="fill:var(--bg)"/>
+    <circle cx="20.5" cy="13" r="2.4" style="fill:var(--label);opacity:.55"/>
+    <path d="M5 21.5l6-5.5 4.5 4 3-2.5 8.5 6v1a2.5 2.5 0 0 1-2.5 2.5h-17A2.5 2.5 0 0 1 5 24.5z" style="fill:var(--label)"/>
+    <path d="M9 3.5h2.4v2.4H9zM14.8 3.5h2.4v2.4h-2.4zM20.6 3.5H23v2.4h-2.4zM9 26.1h2.4v2.4H9zM14.8 26.1h2.4v2.4h-2.4zM20.6 26.1H23v2.4h-2.4z" style="fill:var(--bg)"/>
+  </symbol>
+  <symbol id="gh-mark" viewBox="0 0 16 16">
+    <path fill="currentColor" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+  </symbol>
+  <symbol id="plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="chev-right" viewBox="0 0 14 14"><path d="M5 2.5L9.5 7 5 11.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.5 1.6h4.9A1.5 1.5 0 0 1 14 6.1v5.4a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 20 20"><path d="M3 7a2 2 0 0 1 2-2h1.6l1.2-1.6h4.4L13.4 5H15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="10.3" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 20 20"><path d="M6.5 4.3v11.4a.6.6 0 0 0 .9.5l9-5.7a.6.6 0 0 0 0-1L7.4 3.8a.6.6 0 0 0-.9.5z" fill="currentColor"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 20 20"><rect x="5" y="4" width="3.4" height="12" rx="1" fill="currentColor"/><rect x="11.6" y="4" width="3.4" height="12" rx="1" fill="currentColor"/></symbol>
+  <symbol id="i-step-back" viewBox="0 0 20 20"><path d="M12.5 5L7.5 10l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-step-fwd" viewBox="0 0 20 20"><path d="M7.5 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<!-- =============================== HOME (route #/) =============================== -->
+<div class="home" id="home" data-page="home">
+  <header class="homenav" id="homeNav">
+    <div class="homenav-inner">
+      <a class="logo" href="#/" data-i18n-aria="navHome">
+        <svg class="mark" aria-hidden="true"><use href="#fcs-mark"/></svg>
+        <span data-i18n="appTitle">Frame Capture Studio</span>
+      </a>
+      <nav class="homenav-links" aria-label="Sections">
+        <a href="#features" data-scroll="features" data-i18n="navFeatures">Features</a>
+        <a href="#how" data-scroll="how" data-i18n="navHow">How it works</a>
+        <a href="#faq" data-scroll="faq" data-i18n="navFaq">FAQ</a>
+      </nav>
+      <div class="homenav-actions">
+        <button class="icon-btn" id="homeLangBtn" type="button" data-i18n-aria="navLanguage" data-i18n-title="navLanguage">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="3.8" ry="9"/><path d="M3.5 9h17M3.5 15h17"/></svg>
+        </button>
+        <button class="icon-btn" id="homeThemeBtn" type="button">
+          <svg class="theme-glyph" viewBox="0 0 24 24" aria-hidden="true">
+            <mask id="tgMaskHome"><rect width="24" height="24" fill="#fff"/><circle class="tg-bite" cx="17" cy="7" r="5" fill="#000"/></mask>
+            <circle class="tg-core" cx="12" cy="12" r="4.4" fill="currentColor" mask="url(#tgMaskHome)"/>
+            <g class="tg-rays" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g>
+          </svg>
+        </button>
+        <a class="btn primary small" href="#/editor" id="navCreate"><svg aria-hidden="true"><use href="#plus"/></svg><span data-i18n="create">Start</span></a>
+      </div>
+    </div>
+  </header>
+
+  <main class="home-main">
+    <section class="hero" aria-labelledby="heroTitle">
+      <h1 class="hero-title" id="heroTitle" tabindex="-1" data-i18n="appTitle">Frame Capture Studio</h1>
+      <p class="hero-text" data-i18n="heroText"></p>
+      <div class="hero-actions">
+        <a class="btn primary large" href="#/editor" id="heroCreate"><svg aria-hidden="true"><use href="#plus"/></svg><span data-i18n="create">Start</span></a>
+        <a class="btn large" href="https://github.com/aligokdam/frame.capture.studio" target="_blank" rel="noopener noreferrer">
+          <svg aria-hidden="true"><use href="#gh-mark"/></svg><span data-i18n="viewOnGithub">View on GitHub</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="home-block" id="how" aria-labelledby="howTitle">
+      <div class="block-head">
+        <p class="eyebrow" data-i18n="navHow">How it works</p>
+        <h2 id="howTitle" data-i18n="howTitle"></h2>
+      </div>
+      <ol class="how-grid">
+        <li class="how-step"><span class="how-num">1</span><h3 data-i18n="how1Title"></h3><p data-i18n="how1Text"></p></li>
+        <li class="how-step"><span class="how-num">2</span><h3 data-i18n="how2Title"></h3><p data-i18n="how2Text"></p></li>
+        <li class="how-step"><span class="how-num">3</span><h3 data-i18n="how3Title"></h3><p data-i18n="how3Text"></p></li>
+        <li class="how-step"><span class="how-num">4</span><h3 data-i18n="how4Title"></h3><p data-i18n="how4Text"></p></li>
+      </ol>
+    </section>
+
+    <section class="home-block" id="features" aria-labelledby="featuresTitle">
+      <div class="block-head">
+        <p class="eyebrow" data-i18n="navFeatures">Features</p>
+        <h2 id="featuresTitle" data-i18n="featuresTitle"></h2>
+      </div>
+      <div class="feature-grid">
+        <article class="feature compact">
+          <svg class="feature-icon" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="15" width="22" height="8" rx="2.5"/><path d="M11 6v20"/><circle cx="11" cy="6" r="2.5"/><path d="M15 19h6M19 17l2 2-2 2"/></svg>
+          <h3 data-i18n="featStartTitle"></h3>
+          <p data-i18n="featStartText"></p>
+        </article>
+        <article class="feature compact">
+          <svg class="feature-icon" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="14" cy="15" r="9"/><path d="M14 10v5l3 2M11 3h6"/></svg>
+          <h3 data-i18n="featIntervalTitle"></h3>
+          <p data-i18n="featIntervalText"></p>
+        </article>
+        <article class="feature compact">
+          <svg class="feature-icon" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="22" height="16" rx="2.5"/><path d="M8 11V9h3M20 11V9h-3M8 17v2h3M20 17v2h-3"/></svg>
+          <h3 data-i18n="featResTitle"></h3>
+          <p data-i18n="featResText"></p>
+        </article>
+        <article class="feature compact">
+          <svg class="feature-icon" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10l6 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 3v6h6"/><path d="M9 20l3-4 2.5 2.5L17 15l3 5z"/></svg>
+          <h3 data-i18n="featFormatsTitle"></h3>
+          <p data-i18n="featFormatsText"></p>
+        </article>
+        <article class="feature compact">
+          <svg class="feature-icon" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h4.3l2.5 2.6h8.2A2.5 2.5 0 0 1 24 11.1v9.4A2.5 2.5 0 0 1 21.5 23h-15A2.5 2.5 0 0 1 4 20.5z"/><path d="M14 12.5v6M11 15.5l3 3 3-3"/></svg>
+          <h3 data-i18n="featExportTitle"></h3>
+          <p data-i18n="featExportText"></p>
+        </article>
+        <article class="feature compact">
+          <svg class="feature-icon" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="12" width="16" height="12" rx="2.5"/><path d="M9.5 12V8.5a4.5 4.5 0 0 1 9 0V12"/></svg>
+          <h3 data-i18n="privacyTitle">Privacy</h3>
+          <p data-i18n="featPrivacyText"></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="values" aria-labelledby="valuesTitle">
+      <h2 class="values-title" id="valuesTitle" data-i18n="heroEyebrow">Free, open source and private</h2>
+      <div class="values-grid">
+        <div class="value-item">
+          <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.6L14 18.4l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg>
+          <h3 data-i18n="freeTitle">Free</h3><p data-i18n="freeText"></p>
+        </div>
+        <div class="value-item">
+          <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 8l-6 6 6 6M18 8l6 6-6 6M15.5 5l-3 18"/></svg>
+          <h3 data-i18n="openTitle">Open source</h3><p data-i18n="openText"></p>
+        </div>
+        <div class="value-item">
+          <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="12" width="16" height="12" rx="2.5"/><path d="M9.5 12V8.5a4.5 4.5 0 0 1 9 0V12"/></svg>
+          <h3 data-i18n="privateTitle">Private</h3><p data-i18n="privateText"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-block" id="github" aria-labelledby="githubTitle">
+      <div class="repo-card">
+        <svg class="repo-icon" aria-hidden="true"><use href="#gh-mark"/></svg>
+        <h2 id="githubTitle">GitHub</h2>
+        <a class="btn primary large" id="githubBtn" href="https://github.com/aligokdam/frame.capture.studio" target="_blank" rel="noopener noreferrer">
+          <svg aria-hidden="true"><use href="#gh-mark"/></svg><span data-i18n="viewRepo">View Repository</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="cta" aria-labelledby="ctaTitle">
+      <h2 id="ctaTitle" data-i18n="ctaTitle">Ready?</h2>
+      <p class="lead" data-i18n="ctaText"></p>
+      <a class="btn primary large" href="#/editor" id="ctaCreate"><svg aria-hidden="true"><use href="#plus"/></svg><span data-i18n="create">Start</span></a>
+    </section>
+
+    <section class="faq" id="faq" aria-labelledby="faqTitle">
+      <h2 id="faqTitle" data-i18n="faqTitle">Frequently Asked Questions</h2>
+      <div class="faq-list">
+        <details class="faq-item"><summary><span data-i18n="faq1q"></span><span class="faq-icon" aria-hidden="true"></span></summary><p data-i18n="faq1a"></p></details>
+        <details class="faq-item"><summary><span data-i18n="faq2q"></span><span class="faq-icon" aria-hidden="true"></span></summary><p data-i18n="faq2a"></p></details>
+        <details class="faq-item"><summary><span data-i18n="faq3q"></span><span class="faq-icon" aria-hidden="true"></span></summary><p data-i18n="faq3a"></p></details>
+        <details class="faq-item"><summary><span data-i18n="faq4q"></span><span class="faq-icon" aria-hidden="true"></span></summary><p data-i18n="faq4a"></p></details>
+        <details class="faq-item"><summary><span data-i18n="faq5q"></span><span class="faq-icon" aria-hidden="true"></span></summary><p data-i18n="faq5a"></p></details>
+        <details class="faq-item"><summary><span data-i18n="faq6q"></span><span class="faq-icon" aria-hidden="true"></span></summary><p data-i18n="faq6a"></p></details>
+      </div>
+    </section>
+  </main>
+
+  <main class="terms-main" id="legal">
+    <article class="legal-doc" data-doc="privacy">
+      <h1 class="terms-title" tabindex="-1" data-i18n="privacyTitle">Privacy Policy</h1>
+      <p class="terms-updated" data-i18n="legalUpdated"></p>
+      <p class="legal-p" data-i18n="privacyP1"></p>
+      <p class="legal-p" data-i18n="privacyP2"></p>
+      <p class="legal-p" data-i18n-rich="privacyP3" data-link="https://github.com/aligokdam/frame.capture.studio"></p>
+    </article>
+    <article class="legal-doc" data-doc="terms">
+      <h1 class="terms-title" tabindex="-1" data-i18n="termsTitle">Terms of Use</h1>
+      <p class="terms-updated" data-i18n="legalUpdated"></p>
+      <p class="legal-p" data-i18n="termsP1"></p>
+      <p class="legal-p" data-i18n-rich="termsP2" data-link="#/privacy"></p>
+      <p class="legal-p" data-i18n-rich="termsP3" data-link="https://github.com/aligokdam/frame.capture.studio/issues"></p>
+    </article>
+  </main>
+
+  <footer class="home-footer">
+    <a class="footer-link" href="#/privacy"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.6"/><path d="M5.3 7V5a2.7 2.7 0 0 1 5.4 0v2"/></svg><span data-i18n="privacyPolicy">Privacy Policy</span></a>
+    <span class="footer-dot" aria-hidden="true">·</span>
+    <a class="footer-link" href="#/terms" data-i18n="termsLink">Terms</a>
+  </footer>
+</div>
+
+<!-- ============================== EDITOR (route #/editor) ============================== -->
+<div class="app" id="app" data-page="editor">
+
+  <header class="topbar">
+    <div class="brand">
+      <h1 class="brand-title" id="editorTitle" tabindex="-1"><a class="logo" href="#/" data-i18n-aria="navHome"><svg class="mark" aria-hidden="true"><use href="#fcs-mark"/></svg><span data-i18n="appTitle">Frame Capture Studio</span></a></h1>
+    </div>
+    <nav class="toolbar" aria-label="Tools">
+      <button class="icon-btn" id="helpBtn" type="button" data-i18n-aria="navHelp" data-i18n-title="navHelp">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button class="icon-btn" id="langBtn" type="button" data-i18n-aria="navLanguage" data-i18n-title="navLanguage">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="3.8" ry="9"/><path d="M3.5 9h17M3.5 15h17"/></svg>
+      </button>
+      <button class="icon-btn" id="themeBtn" type="button">
+        <svg class="theme-glyph" viewBox="0 0 24 24" aria-hidden="true">
+          <mask id="tgMask"><rect width="24" height="24" fill="#fff"/><circle class="tg-bite" cx="17" cy="7" r="5" fill="#000"/></mask>
+          <circle class="tg-core" cx="12" cy="12" r="4.4" fill="currentColor" mask="url(#tgMask)"/>
+          <g class="tg-rays" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g>
+        </svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="workspace" id="workspace">
+
+    <section class="stage surface" aria-labelledby="stageTitle">
+      <div class="stage-head">
+        <div class="stage-meta">
+          <h2 class="stage-title" id="stageTitle" data-i18n="previewTitle">Preview</h2>
+          <span class="stage-file" id="fileMeta"></span>
+        </div>
+        <div class="stage-actions">
+          <button class="btn small" id="replaceBtn" type="button" data-i18n="replaceVideo" hidden>Replace</button>
+        </div>
+      </div>
+
+      <div class="stage-body" id="stageBody">
+        <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-describedby="dropHint">
+          <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="38" height="26" rx="5"/><path d="M11 6v5M19 6v5M29 6v5M37 6v5M11 37v5M19 37v5M29 37v5M37 37v5"/><path d="M21 19.5v9l7.5-4.5z"/></svg>
+          <span class="dropzone-title" data-i18n="dropTitle">Choose a video or drop it here</span>
+          <span class="dropzone-hint" id="dropHint" data-i18n="dropHint">MP4, MOV, WEBM, MKV or M4V</span>
+          <span class="btn primary" aria-hidden="true" data-i18n="chooseVideo">Choose Video</span>
+        </div>
+
+        <div class="player" id="player" hidden>
+          <video id="video" playsinline muted preload="auto" disablepictureinpicture></video>
+          <span class="player-time" id="playerTime">00:00.00</span>
+          <div class="flash" id="flash" aria-hidden="true"></div>
+        </div>
+
+        <div class="drop-overlay" aria-hidden="true"><span data-i18n="dropRelease">Drop to open</span></div>
+        <div class="busy" id="busy" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="busyText"></span></div>
+      </div>
+
+      <div class="transport" id="transport" hidden>
+        <div class="transport-row">
+          <div class="transport-btns">
+            <button class="icon-btn" id="stepBackBtn" type="button" data-i18n-aria="stepBack" data-i18n-title="stepBack"><svg aria-hidden="true"><use href="#i-step-back"/></svg></button>
+            <button class="icon-btn play-btn" id="playBtn" type="button" data-i18n-aria="play" data-i18n-title="play"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+            <button class="icon-btn" id="stepFwdBtn" type="button" data-i18n-aria="stepForward" data-i18n-title="stepForward"><svg aria-hidden="true"><use href="#i-step-fwd"/></svg></button>
+          </div>
+          <span class="tc" id="timecode"><span id="tcNow">00:00.00</span><span class="tc-sep">/</span><span id="tcDur">00:00.00</span></span>
+          <button class="btn small" id="snapBtn" type="button"><svg aria-hidden="true"><use href="#i-camera"/></svg><span data-i18n="snapFrame">Grab this frame</span></button>
+        </div>
+        <div class="timeline" id="timeline">
+          <div class="filmstrip" id="filmstrip" aria-hidden="true"></div>
+          <div class="tl-skip" id="tlSkip" aria-hidden="true"></div>
+          <div class="tl-ticks" id="tlTicks" aria-hidden="true"></div>
+          <div class="playhead" id="playhead" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" data-i18n-aria="cursorLabel">
+            <span class="playhead-knob"></span>
+          </div>
+        </div>
+      </div>
+
+      <input type="file" id="fileInput" class="sr-only" tabindex="-1" aria-hidden="true"
+        accept="video/*,.mp4,.m4v,.mov,.webm,.mkv,.ogv">
+    </section>
+
+    <aside class="inspector surface" aria-label="Inspector">
+      <div class="group">
+        <h2 class="group-title" data-i18n="groupStart">Start</h2>
+        <div class="control">
+          <p class="hint hint-top" id="startHint" data-i18n="startHint">Where the first frame is taken.</p>
+          <div class="segmented wide" role="radiogroup" id="startSeg" aria-describedby="startHint">
+            <button type="button" role="radio" aria-checked="true" data-start="beginning" data-i18n="startBeginning">Whole video</button>
+            <button type="button" role="radio" aria-checked="false" data-start="cursor" data-i18n="startCursor">From cursor</button>
+          </div>
+          <div class="readout"><span data-i18n="startAt">First frame at</span><output id="startValue">00:00.00</output></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2 class="group-title" data-i18n="groupCapture">Capture</h2>
+        <div class="control">
+          <div class="control-head">
+            <label for="interval" data-i18n="intervalLabel">Interval</label>
+            <output class="value" id="intervalValue" for="interval">1 s</output>
+          </div>
+          <p class="hint" id="intervalHint" data-i18n="intervalHint">Time between two frames.</p>
+          <input type="range" id="interval" min="1" max="5" step="1" value="1" aria-describedby="intervalHint">
+          <div class="scale" aria-hidden="true"><span id="intervalMin">1 s</span><span id="intervalMax">5 s</span></div>
+        </div>
+
+        <div class="control">
+          <div class="control-head"><span class="control-label" id="rangeLabel" data-i18n="rangeLabel">How many</span></div>
+          <div class="segmented wide" role="radiogroup" id="rangeSeg" aria-labelledby="rangeLabel">
+            <button type="button" role="radio" aria-checked="true" data-range="manual" data-i18n="rangeManual">Manual</button>
+            <button type="button" role="radio" aria-checked="false" data-range="end" data-i18n="rangeEnd">To the end</button>
+          </div>
+        </div>
+
+        <div class="control" id="countControl">
+          <div class="control-head">
+            <label for="count" data-i18n="countLabel">Frame count</label>
+            <output class="value" id="countValue" for="count">3</output>
+          </div>
+          <input type="range" id="count" min="1" max="5" step="1" value="3" aria-describedby="countHint">
+          <div class="scale" aria-hidden="true"><span>1</span><span>5</span></div>
+          <p class="hint" id="countHint" data-i18n="countHint">Stops early if the video ends first.</p>
+        </div>
+
+        <div class="plan" id="plan" aria-live="polite">
+          <div class="plan-row"><span data-i18n="planFrames">Frames</span><strong id="planFrames">–</strong></div>
+          <div class="plan-row"><span data-i18n="planSpan">Span</span><strong id="planSpan">–</strong></div>
+          <div class="plan-row"><span data-i18n="planSize">Size</span><strong id="planSize">–</strong></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2 class="group-title" data-i18n="groupExport">Export</h2>
+        <div class="export-row">
+          <span class="control-label" id="formatLabel" data-i18n="formatLabel">Format</span>
+          <div class="segmented" role="radiogroup" id="formatSeg" aria-labelledby="formatLabel">
+            <button type="button" role="radio" aria-checked="true" data-format="png">PNG</button>
+            <button type="button" role="radio" aria-checked="false" data-format="jpg">JPG</button>
+          </div>
+        </div>
+        <button class="btn primary block" id="extractBtn" type="button" disabled>
+          <svg aria-hidden="true"><use href="#i-camera"/></svg>
+          <span id="extractLabel">Extract frames</span>
+        </button>
+        <div class="progress" id="progress" hidden>
+          <div class="progress-bar"><span id="progressFill"></span></div>
+          <div class="progress-meta"><span id="progressText"></span><button class="btn small" id="cancelBtn" type="button" data-i18n="cancel">Cancel</button></div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <section class="results surface" id="results" aria-labelledby="resultsTitle" hidden>
+    <div class="results-head">
+      <div class="stage-meta">
+        <h2 class="stage-title" id="resultsTitle" data-i18n="resultsTitle">Frames</h2>
+        <span class="stage-file" id="resultsMeta"></span>
+      </div>
+      <div class="results-actions">
+        <button class="btn small" id="clearBtn" type="button" data-i18n="clearFrames">Clear</button>
+        <button class="btn small" id="folderBtn" type="button" hidden><svg aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="saveToFolder">Save to folder</span></button>
+        <button class="btn small primary" id="zipBtn" type="button"><svg aria-hidden="true"><use href="#i-download"/></svg><span data-i18n="downloadZip">Download all (ZIP)</span></button>
+      </div>
+    </div>
+    <ul class="frames" id="frames"></ul>
+  </section>
+
+  <footer class="home-footer editor-footer">
+    <a class="footer-link" href="#/privacy"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.6"/><path d="M5.3 7V5a2.7 2.7 0 0 1 5.4 0v2"/></svg><span data-i18n="privacyPolicy">Privacy Policy</span></a>
+    <span class="footer-dot" aria-hidden="true">·</span>
+    <a class="footer-link" href="#/terms" data-i18n="termsLink">Terms</a>
+  </footer>
+</div>
+
+<!-- One sheet hosts the Language list and the User Guide. -->
+<div class="sheet-backdrop" id="sheetBackdrop"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" aria-hidden="true" tabindex="-1">
+  <div class="sheet-header">
+    <div class="start">
+      <button class="nav-btn" id="sheetBack" type="button" hidden>
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5L5.5 9l5.5 5.5"/></svg>
+        <span id="sheetBackLabel"></span>
+      </button>
+    </div>
+    <h2 id="sheetTitle"></h2>
+    <div class="end"><button class="nav-btn strong" id="sheetDone" type="button" data-i18n="done">Done</button></div>
+  </div>
+
+  <div class="sheet-body" id="sheetBody">
+
+
+    <div class="view" data-view="language" hidden>
+      <div class="section"><ul class="list" id="langList" role="radiogroup" data-i18n-aria-label="langLabel"></ul></div>
+    </div>
+
+
+    <div class="view" data-view="guide" hidden>
+      <div class="prose">
+        <p class="lead" data-i18n="aboutTagline"></p>
+        <p data-i18n="aboutBody1"></p>
+      </div>
+      <div class="section">
+        <h3 class="section-title" data-i18n="aboutHowTitle"></h3>
+        <ol class="list steps">
+          <li><span class="step-num">1</span><span data-i18n="aboutStep1"></span></li>
+          <li><span class="step-num">2</span><span data-i18n="aboutStep2"></span></li>
+          <li><span class="step-num">3</span><span data-i18n="aboutStep3"></span></li>
+          <li><span class="step-num">4</span><span data-i18n="aboutStep4"></span></li>
+        </ol>
+      </div>
+      <div class="section">
+        <h3 class="section-title" data-i18n="keysTitle">Keyboard</h3>
+        <ul class="list">
+          <li class="row text-only"><kbd>Space</kbd><span class="row-label" data-i18n="keyPlay"></span></li>
+          <li class="row text-only"><kbd>← →</kbd><span class="row-label" data-i18n="keyStep"></span></li>
+          <li class="row text-only"><kbd>Shift ← →</kbd><span class="row-label" data-i18n="keyJump"></span></li>
+          <li class="row text-only"><kbd>S</kbd><span class="row-label" data-i18n="keySnap"></span></li>
+        </ul>
+      </div>
+      <div class="section">
+        <ul class="list">
+          <li><a class="row" href="#/privacy" style="text-decoration:none">
+            <span class="row-label" data-i18n="setPrivacyRow">Privacy and data</span>
+            <svg class="chev" aria-hidden="true"><use href="#chev-right"/></svg>
+          </a></li>
+          <li><a class="row" href="https://github.com/aligokdam/frame.capture.studio" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
+            <span class="row-label" data-i18n="viewRepo">View Repository</span>
+            <span class="row-value"><svg class="row-icon" aria-hidden="true"><use href="#gh-mark"/></svg><svg class="chev" aria-hidden="true"><use href="#chev-right"/></svg></span>
+          </a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="toastText"></span></div>
+
+<script src="assets/js/i18n.js?v=1.0.0"></script>
+<script src="assets/js/zip.js?v=1.0.0"></script>
+<script src="assets/js/grabber.js?v=1.0.0"></script>
+<script src="assets/js/app.js?v=1.0.0"></script>
+<script src="assets/js/home.js?v=1.0.0"></script>
+</body>
+</html>
